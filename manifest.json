@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "heelgueta.omacheat",
+  "name": "Omacheat",
+  "version": "1.0.0",
+  "author": "heelgueta",
+  "license": "MIT",
+  "description": "A friendlier keybindings help window: shortcuts grouped by what they do, with keycaps and search.",
+  "kinds": [
+    "overlay"
+  ],
+  "entryPoints": {
+    "overlay": "Omacheat.qml"
+  }
+}
