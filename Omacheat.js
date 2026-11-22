@@ -64,13 +64,22 @@ function itemId(mods, desc) {
   return mods.map(function(m) { return m.toUpperCase() }).sort().join(" ") + "|" + desc
 }
 
+function comboId(mods, key) {
+  return mods.map(function(m) { return m.toUpperCase() }).sort().join(" ") + "|" + String(key).toUpperCase()
+}
+
 // `disabled`: [{mods, key, desc}] switched off by the user. Hyprland no longer
 // reports those, so they are merged back in to stay visible (and re-enableable).
-function parse(text, disabled) {
+// `custom`: [{mods, key, desc, cmd, category}] shortcuts the user added; they take the
+// category they were given and are flagged so the window can offer to remove them.
+function parse(text, disabled, custom) {
   var rows = []
   var seen = {}
   var off = {}
+  var added = {}
   disabled = disabled || []
+  custom = custom || []
+  for (var c = 0; c < custom.length; c++) added[comboId(custom[c].mods, custom[c].key)] = custom[c]
   for (var d = 0; d < disabled.length; d++) off[itemId(disabled[d].mods, disabled[d].desc)] = true
   var lines = String(text || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
@@ -84,7 +93,12 @@ function parse(text, disabled) {
     var plus = combo.indexOf(" + ")
     var mods = plus < 0 ? [] : combo.substring(0, plus).split(/\s+/)
     var key = plus < 0 ? combo : combo.substring(plus + 3)
-    rows.push(makeRow(mods, key, desc, off))
+    rows.push(makeRow(mods, key, desc, off, added[comboId(mods, key)]))
+  }
+  // Added shortcuts that Hyprland did not report (e.g. a failed reload) stay visible and removable.
+  for (var a in added) {
+    var have = rows.some(function(r) { return comboId(r.mods, r.key) === a })
+    if (!have) rows.push(makeRow(added[a].mods, added[a].key, added[a].desc, off, added[a]))
   }
   for (var e = 0; e < disabled.length; e++) {
     var x = disabled[e]
@@ -96,13 +110,20 @@ function parse(text, disabled) {
 
 var LOCKED = /^(Keybindings|Omarchy menu|System menu)$/
 
-function makeRow(mods, key, desc, off) {
+function makeRow(mods, key, desc, off, added) {
+  var known = added && byCategory(added.category)
   return {
-    mods: mods, key: key, desc: desc, category: categoryFor(desc, mods, key),
-    items: [{ mods: mods, key: key, desc: desc }],
-    disabled: !!off[itemId(mods, desc)],
-    locked: LOCKED.test(desc)
+    mods: mods, key: key, desc: added ? added.desc : desc,
+    category: known ? added.category : categoryFor(desc, mods, key),
+    items: [{ mods: mods, key: key, desc: added ? added.desc : desc }],
+    disabled: !added && !!off[itemId(mods, desc)],
+    locked: !added && LOCKED.test(desc),
+    custom: !!added
   }
+}
+
+function byCategory(id) {
+  return CATEGORIES.some(function(c) { return c.id === id })
 }
 
 // "Switch to workspace 1" … "…9" become one row: Super + 1…0 → "Switch to workspace N".
@@ -148,10 +169,10 @@ function categories(rows, query) {
 
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i]
-    var hay = (r.desc + " " + tokens(r).join(" ") + " " + byId[r.category].title).toLowerCase()
+    var hay = (r.desc + " " + tokens(r).join(" ") + " " + r.key + " " + byId[r.category].title).toLowerCase()
     var ok = true
     for (var w = 0; w < q.length; w++) if (hay.indexOf(q[w]) < 0) { ok = false; break }
-    if (ok) byId[r.category].rows.push({ desc: r.desc, tokens: tokens(r), items: r.items, disabled: r.disabled, locked: r.locked })
+    if (ok) byId[r.category].rows.push({ desc: r.desc, tokens: tokens(r), items: r.items, disabled: r.disabled, locked: r.locked, custom: r.custom })
   }
 
   var out = []
@@ -173,4 +194,54 @@ function toColumns(cats, n) {
     heights[best] += cats[c].rows.length + 3
   }
   return cols
+}
+
+// Hyprland names for the keys the "add shortcut" form accepts, by Qt key code.
+var QT_KEYS = {
+  0x20: "SPACE", 0x01000004: "RETURN", 0x01000005: "RETURN", 0x01000001: "TAB",
+  0x01000012: "LEFT", 0x01000013: "UP", 0x01000014: "RIGHT", 0x01000015: "DOWN",
+  0x2c: "comma", 0x2e: "period", 0x2d: "minus", 0x3d: "equal", 0x2f: "slash", 0x3b: "semicolon",
+  0x27: "apostrophe", 0x5b: "bracketleft", 0x5d: "bracketright", 0x5c: "backslash", 0x60: "grave",
+  0x01000009: "PRINT", 0x01000010: "HOME", 0x01000011: "END", 0x01000016: "PRIOR", 0x01000017: "NEXT",
+  0x01000007: "DELETE", 0x01000003: "BACKSPACE", 0x01000006: "INSERT"
+}
+
+// null when the key can't be bound from the form (modifiers, Escape, dead keys …).
+function keyFromQt(code) {
+  if (code >= 0x41 && code <= 0x5a) return String.fromCharCode(code)        // A-Z
+  if (code >= 0x30 && code <= 0x39) return String.fromCharCode(code)        // 0-9
+  if (code >= 0x01000030 && code <= 0x0100003b) return "F" + (code - 0x01000030 + 1)
+  return QT_KEYS[code] || null
+}
+
+// The existing shortcut using this combination, or null. Collapsed rows (workspace 1…0) check each item.
+function conflict(rows, mods, key) {
+  var want = comboId(mods, key)
+  for (var i = 0; i < rows.length; i++)
+    for (var j = 0; j < rows[i].items.length; j++)
+      if (comboId(rows[i].items[j].mods, rows[i].items[j].key) === want) return rows[i]
+  return null
+}
+
+// Validation message for the form, or "" when it can be saved.
+function validate(form) {
+  if (!String(form.desc || "").trim()) return "Give it a name"
+  if (!String(form.cmd || "").trim()) return "What should it run?"
+  if (!form.key) return "Press a key"
+  if (!form.mods.length && !/^(F\d+|PRINT)$/.test(form.key)) return "Pick at least one modifier"
+  return ""
+}
+
+// `text` (the --print output) without the line for this combination, so a just-removed
+// shortcut does not reappear while Hyprland is still reloading.
+function dropBinding(text, mods, key) {
+  var want = comboId(mods, key)
+  return String(text || "").split("\n").filter(function(line) {
+    var arrow = line.indexOf("→")
+    if (arrow < 0) return true
+    var combo = line.substring(0, arrow).trim()
+    var plus = combo.indexOf(" + ")
+    var m = plus < 0 ? [] : combo.substring(0, plus).split(/\s+/)
+    return comboId(m, plus < 0 ? combo : combo.substring(plus + 3)) !== want
+  }).join("\n")
 }
