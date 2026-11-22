@@ -16,6 +16,10 @@ menus, notifications, system, media), draws them as keycaps, and lets you search
 - **Closes when you use a shortcut**: not when you merely tap Super or Ctrl. Turn this off with the
   "Close after using a shortcut" switch in the footer. See [How closing works](#how-closing-works).
 
+## Requirements
+
+Omarchy with the Quickshell shell (Hyprland 0.55+ Lua config), plus `jq`, `lua`, and `flock`/`setsid` from util-linux. All ship with Omarchy. Tests also need `node`.
+
 ## Install
 
 ```bash
