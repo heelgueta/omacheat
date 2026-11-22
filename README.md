@@ -62,7 +62,7 @@ While Omacheat is open, the generated lua file reports the scancode of each key 
 no text, no history, only the latest code) to `$XDG_RUNTIME_DIR/omacheat-keys`. If the window did not
 receive that key itself a moment later, a shortcut fired and the window closes. A key the window did
 receive (typing, or a combination nothing is bound to) leaves it open. Reporting only happens while a
-flag file written by the open window is under 15 minutes old.
+flag file written by the open window is under two minutes old (the open window refreshes it and removes it when it closes, however it closes).
 
 ## Uninstall
 

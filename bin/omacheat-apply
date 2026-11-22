@@ -6,7 +6,7 @@
 #   omacheat-apply settings | setting <key> <true|false>   UI preferences (closeOnUse)
 #   omacheat-apply custom               print the added shortcuts as JSON
 #   omacheat-apply add|remove <json>    add / remove a shortcut: {"mods":[..],"key":"..","desc":"..","cmd":"..","category":".."}
-#   omacheat-apply watch on|off         tell the Hyprland key listener whether the window is open
+#   omacheat-apply watch on|off|touch         tell the Hyprland key listener whether the window is open
 #   omacheat-apply apply                regenerate the lua file and reload Hyprland
 #
 # State:     ~/.config/omarchy/omacheat-disabled.json, omacheat-custom.json
@@ -88,7 +88,7 @@ generate() {
 -- we then report the scancode of the latest non-modifier key press, so the window can tell
 -- a key it received itself (typing, or an unbound combo) from one the compositor swallowed
 -- because it completed a shortcut. Nothing is recorded while the flag is absent or older
--- than 15 minutes, and only the latest code is kept.
+-- than two minutes, and only the latest code is kept.
 do
   local dir = os.getenv("XDG_RUNTIME_DIR") or "/tmp"
   local flag, out = dir .. "/omacheat-watch", dir .. "/omacheat-keys"
@@ -100,7 +100,7 @@ do
     if not f then return end
     local stamp = tonumber(f:read("*l") or "") or 0
     f:close()
-    if os.time() - stamp > 900 then return end
+    if os.time() - stamp > 120 then return end
     seq = seq + 1
     local w = io.open(out, "w")
     if w then w:write(os.time(), " ", seq, " ", code, "\n"); w:close() end
@@ -138,8 +138,9 @@ case "$1" in
     ;;
   watch)
     if [[ $2 == on ]]; then date +%s >"$watch_flag"; : >"${watch_flag%-watch}-keys"
+    elif [[ $2 == touch ]]; then [[ -e $watch_flag ]] && date +%s >"$watch_flag"
     else rm -f "$watch_flag" "${watch_flag%-watch}-keys"; fi ;;
   scan) scan_binds ;;
   apply) generate; hyprctl reload >/dev/null ;;
-  *) echo "usage: omacheat-apply list | set off|on <json> | custom | add|remove <json> | watch on|off | apply" >&2; exit 1 ;;
+  *) echo "usage: omacheat-apply list | set off|on <json> | custom | add|remove <json> | watch on|off|touch | apply" >&2; exit 1 ;;
 esac

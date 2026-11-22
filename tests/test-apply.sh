@@ -95,9 +95,13 @@ listener 133:1 46:1 46:0 133:0; check "Super+key reports the key code" '[[ $(awk
 : >"$keys"; listener 46:0 ;         check "key releases are not reported" '[[ ! -s $keys ]]'
 : >"$keys"; listener 123:1;         check "media key is reported" '[[ $(awk "{print \$3}" "$keys") == 123 ]]'
 : >"$keys"; listener 38:1 39:1;     check "only the latest code is kept" '[[ $(wc -l <"$keys") == 1 && $(awk "{print \$3}" "$keys") == 39 ]]'
-echo $(( $(date +%s) - 1000 )) >"$XDG_RUNTIME_DIR/omacheat-watch"
-: >"$keys"; listener 133:1 46:1;  check "stale flag (>15 min) records nothing" '[[ ! -s $keys ]]'
-"$apply" watch off
+echo $(( $(date +%s) - 200 )) >"$XDG_RUNTIME_DIR/omacheat-watch"
+: >"$keys"; listener 133:1 46:1;  check "stale flag (>2 min) records nothing" '[[ ! -s $keys ]]'
+"$apply" watch on; echo $(( $(date +%s) - 200 )) >"$XDG_RUNTIME_DIR/omacheat-watch"; "$apply" watch touch
+: >"$keys"; listener 133:1 46:1; check "watch touch keeps the flag fresh" '[[ $(awk "{print \$3}" "$keys") == 46 ]]'
+"$apply" watch off; "$apply" watch touch
+check "watch touch does not recreate a removed flag" '[[ ! -e $XDG_RUNTIME_DIR/omacheat-watch ]]'
+"$apply" watch on; "$apply" watch off
 check "watch off removes the files" '[[ ! -e $XDG_RUNTIME_DIR/omacheat-watch && ! -e $keys ]]'
 
 echo; echo "$pass passed, $fail failed"; [[ $fail -eq 0 ]]

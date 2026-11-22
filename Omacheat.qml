@@ -65,6 +65,17 @@ Item {
     root.runNextApply()
   }
 
+  // Safety nets: never leave the flag behind if the plugin is unloaded, and keep it fresh
+  // while open (the listener ignores a flag older than two minutes).
+  Component.onDestruction: Quickshell.execDetached([root.applyScript, "watch", "off"])
+
+  Timer {
+    interval: 30000
+    repeat: true
+    running: root.opened
+    onTriggered: Quickshell.execDetached([root.applyScript, "watch", "touch"])
+  }
+
   function open(payloadJson) {
     root.opened = true
     root.formOpen = false
@@ -75,6 +86,11 @@ Item {
     listProc.running = false
     listProc.running = true
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  // Host entry point (e.g. Super+K pressed again): must clear the key-report flag like dismiss() does.
+  function close() {
+    root.opened = false
   }
 
   function dismiss() {
